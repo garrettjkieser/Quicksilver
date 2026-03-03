@@ -51,31 +51,37 @@ def get_dns_info(url):
 def is_valid_url(url):
     """Checks for a valid domain structure using named groups."""
     pattern = re.compile(
-        r"^(?P<protocol>(https?|ftp)://)?"         # Group 1: Protocol
-        r"(?P<host>"                                # Group 2: Host
-            r"([a-z0-9-]+\.)+[a-z]{2,63}"           # Standard Domain
-            r"|localhost"                           # Localhost
-            r"|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}"  # IPv4
-        r")"
-        r"(?P<port>:\d+)?"                          # Group 3: Port
-        r"(?P<path>/.*)?$",                         # Group 4: Path
+        r"^(?P<protocol>(https?|ftp)://)?"
+        r"(?P<host>"
+            r"([a-z0-9-]+\.)+[a-z]{2,63}"
+            r"|localhost|"
+            r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+        r"(?::\d+)?"
+        r"(/.*)?$",
         re.IGNORECASE,
     )
-    
     match = re.match(pattern, url)
+    # FIX: Must return the boolean result
+    return match is not None and "." in url
 
 
-def copy_to_clipboard():
-    """Copies the current URL to the system clipboard."""
-    url = input_var.get().strip()
-    if url:
+def copy_qr_to_clipboard(_=None):
+    """Copies current URL to clipboard with visual feedback."""
+    raw_url = input_var.get().strip()
+    if raw_url:
+        # Consistency check for HTTPS
+        if not re.match(r"^[a-z]+://", raw_url, re.I):
+            final_url = f"https://{raw_url}"
+        else:
+            final_url = re.sub(r"^http://", "https://", raw_url, flags=re.I)
+        
         root.clipboard_clear()
-        root.clipboard_append(url)
-        messagebox.showinfo("Quicksilver", "URL copied to clipboard!")
+        root.clipboard_append(final_url)
+        messagebox.showinfo("Quicksilver", f"Copied to clipboard:\n{final_url}")
 
 
 def on_type(*_):
-    """Callback for entry changes: Binary Status Red/Green + Auto-HTTPS."""
+    """Updates status light and generates QR on the fly."""
     raw_data = input_var.get().strip()
 
     if not raw_data:
@@ -86,8 +92,6 @@ def on_type(*_):
 
     if is_valid_url(raw_data):
         status_light.itemconfig(light_circle, fill=STATUS_GREEN, outline=STATUS_GREEN)
-
-        # Forced HTTPS Logic
         if not re.match(r"^[a-z]+://", raw_data, re.I):
             final_data = f"https://{raw_data}"
         else:
@@ -103,23 +107,19 @@ def on_type(*_):
 
 
 def auto_generate(data, skip_dns=False):
-    """The core QR generation engine with logo embedding."""
-    global CURRENT_QR_IMG  # pylint: disable=global-statement
+    """Core QR engine."""
+    global CURRENT_QR_IMG # pylint: disable=global-statement
     if not skip_dns:
         dns_label.config(text=get_dns_info(data))
 
     try:
         qr_gen = qrcode.QRCode(
-            version=1,
-            box_size=10,
-            border=4,
+            version=1, box_size=10, border=4,
             error_correction=qrcode.constants.ERROR_CORRECT_H,
         )
         qr_gen.add_data(data)
         qr_gen.make(fit=True)
-        CURRENT_QR_IMG = qr_gen.make_image(
-            fill_color="black", back_color="white"
-        ).convert("RGB")
+        CURRENT_QR_IMG = qr_gen.make_image(fill_color="black", back_color="white").convert("RGB")
 
         logo_path = BASE_DIR / "logo.jpg"
         if logo_path.exists():
@@ -139,7 +139,7 @@ def auto_generate(data, skip_dns=False):
 
 
 def save_file(fmt):
-    """Saves the current QR image as PDF or PNG."""
+    """Saves the QR code."""
     if CURRENT_QR_IMG is None:
         return
     file_path = filedialog.asksaveasfilename(
@@ -156,7 +156,7 @@ def save_file(fmt):
 root = tk.Tk()
 root.title("Quicksilver Live QR")
 root.configure(bg=BG_COLOR)
-root.geometry("500x880")
+root.geometry("500x820")
 
 # Icon Switch
 try:
@@ -169,21 +169,14 @@ try:
 except (tk.TclError, OSError):
     pass
 
-# Header with Status Light
+# Header
 header_frame = tk.Frame(root, bg=BG_COLOR)
 header_frame.pack(pady=(25, 5))
 
-tk.Label(
-    header_frame,
-    text="QUICKSILVER LIVE",
-    fg=ACCENT_COLOR,
-    bg=BG_COLOR,
-    font=("Arial", 14, "bold"),
-).pack(side=tk.LEFT)
+tk.Label(header_frame, text="QUICKSILVER LIVE", fg=ACCENT_COLOR, 
+         bg=BG_COLOR, font=("Arial", 14, "bold")).pack(side=tk.LEFT)
 
-status_light = tk.Canvas(
-    header_frame, width=20, height=20, bg=BG_COLOR, highlightthickness=0
-)
+status_light = tk.Canvas(header_frame, width=20, height=20, bg=BG_COLOR, highlightthickness=0)
 light_circle = status_light.create_oval(5, 5, 15, 15, fill=BG_COLOR)
 status_light.pack(side=tk.LEFT, padx=10)
 
@@ -191,94 +184,41 @@ status_light.pack(side=tk.LEFT, padx=10)
 input_frame = tk.Frame(root, bg=BG_COLOR)
 input_frame.pack(pady=10, padx=20)
 
-tk.Label(
-    input_frame, text="URL:", fg=TEXT_COLOR, bg=BG_COLOR, font=("Arial", 10, "bold")
-).pack(side=tk.LEFT, padx=(0, 10))
+tk.Label(input_frame, text="URL:", fg=TEXT_COLOR, bg=BG_COLOR, font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=(0, 10))
 
 input_var = tk.StringVar()
 input_var.trace_add("write", on_type)
-entry = tk.Entry(
-    input_frame,
-    textvariable=input_var,
-    width=35,
-    font=("Arial", 11),
-    bg=ENTRY_BG,
-    fg=TEXT_COLOR,
-    insertbackground=TEXT_COLOR,
-    relief="flat",
-    borderwidth=8,
-)
+entry = tk.Entry(input_frame, textvariable=input_var, width=35, font=("Arial", 11), 
+                 bg=ENTRY_BG, fg=TEXT_COLOR, insertbackground=TEXT_COLOR, relief="flat", borderwidth=8)
 entry.pack(side=tk.LEFT)
 
-# Encoded URL Preview Label
-final_url_label = tk.Label(
-    root, text="", fg=ACCENT_COLOR, bg=BG_COLOR, font=("Arial", 9, "italic")
-)
+final_url_label = tk.Label(root, text="", fg=ACCENT_COLOR, bg=BG_COLOR, font=("Arial", 9, "italic"))
 final_url_label.pack()
 
-# DNS Box
-dns_label = tk.Label(
-    root,
-    text="DNS Info: Waiting...",
-    fg=ACCENT_COLOR,
-    bg=ENTRY_BG,
-    font=("Consolas" if platform.system() == "Windows" else "Monospace", 9),
-    padx=15,
-    pady=12,
-    justify="left",
-    width=52,
-)
+dns_label = tk.Label(root, text="DNS Info: Waiting...", fg=ACCENT_COLOR, bg=ENTRY_BG, 
+                     font=("Consolas" if platform.system() == "Windows" else "Monospace", 9),
+                     padx=15, pady=12, justify="left", width=52)
 dns_label.pack(pady=15, padx=20)
 
-# QR Preview Area
-qr_label = tk.Label(root, bg=BG_COLOR)
+# QR Preview Area (ONE definition only)
+qr_label = tk.Label(root, bg=BG_COLOR, cursor="hand2")
 qr_label.pack(pady=10)
+qr_label.bind("<Button-1>", copy_qr_to_clipboard)
 
-# Copy to Clipboard Button
-copy_btn = tk.Button(
-    root,
-    text="📋 COPY URL TO CLIPBOARD",
-    command=copy_to_clipboard,
-    bg=ENTRY_BG,
-    fg=TEXT_COLOR,
-    font=("Arial", 10, "bold"),
-    relief="flat",
-    padx=40,
-    pady=10,
-    activebackground="#3d3d4a",
-    activeforeground=TEXT_COLOR,
-)
-copy_btn.pack(pady=(10, 0))
+tk.Label(root, text="(Click QR Code to Copy Link)", fg=ACCENT_COLOR, 
+         bg=BG_COLOR, font=("Arial", 8)).pack()
 
 # Save Buttons Frame
 btn_frame = tk.Frame(root, bg=BG_COLOR)
 btn_frame.pack(pady=20)
 
-tk.Button(
-    btn_frame,
-    text="💾 SAVE PDF",
-    command=lambda: save_file("PDF"),
-    bg=BG_COLOR,
-    fg=ACCENT_COLOR,
-    relief="flat",
-    highlightthickness=1,
-    highlightbackground=ACCENT_COLOR,
-    padx=25,
-    pady=10,
-).pack(side=tk.LEFT, padx=15)
+tk.Button(btn_frame, text="💾 SAVE PDF", command=lambda: save_file("PDF"), 
+          bg=BG_COLOR, fg=ACCENT_COLOR, relief="flat", highlightthickness=1, 
+          highlightbackground=ACCENT_COLOR, padx=25, pady=10).pack(side=tk.LEFT, padx=15)
 
-tk.Button(
-    btn_frame,
-    text="🖼️ SAVE PNG",
-    command=lambda: save_file("PNG"),
-    bg=BG_COLOR,
-    fg=ACCENT_COLOR,
-    relief="flat",
-    highlightthickness=1,
-    highlightbackground=ACCENT_COLOR,
-    padx=25,
-    pady=10,
-).pack(side=tk.LEFT, padx=15)
+tk.Button(btn_frame, text="🖼️ SAVE PNG", command=lambda: save_file("PNG"), 
+          bg=BG_COLOR, fg=ACCENT_COLOR, relief="flat", highlightthickness=1, 
+          highlightbackground=ACCENT_COLOR, padx=25, pady=10).pack(side=tk.LEFT, padx=15)
 
 if __name__ == "__main__":
     on_type()
