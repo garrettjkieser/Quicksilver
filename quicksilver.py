@@ -154,7 +154,7 @@ def save_file(fmt):
 
 # --- UI Setup ---
 root = tk.Tk()
-root.title("Quicksilver Live QR")
+root.title("Quicksilver")
 root.configure(bg=BG_COLOR)
 root.geometry("500x820")
 
@@ -173,7 +173,7 @@ except (tk.TclError, OSError):
 header_frame = tk.Frame(root, bg=BG_COLOR)
 header_frame.pack(pady=(25, 5))
 
-tk.Label(header_frame, text="QUICKSILVER LIVE", fg=ACCENT_COLOR, 
+tk.Label(header_frame, text="Valid URL:", fg=ACCENT_COLOR, 
          bg=BG_COLOR, font=("Arial", 14, "bold")).pack(side=tk.LEFT)
 
 status_light = tk.Canvas(header_frame, width=20, height=20, bg=BG_COLOR, highlightthickness=0)
@@ -205,7 +205,7 @@ qr_label = tk.Label(root, bg=BG_COLOR, cursor="hand2")
 qr_label.pack(pady=10)
 qr_label.bind("<Button-1>", copy_qr_to_clipboard)
 
-tk.Label(root, text="(Click QR Code to Copy Link)", fg=ACCENT_COLOR, 
+tk.Label(root, text="(Click to Copy to Clipboard)", fg=ACCENT_COLOR, 
          bg=BG_COLOR, font=("Arial", 8)).pack()
 
 # Save Buttons Frame
